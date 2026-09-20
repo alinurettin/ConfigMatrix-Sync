@@ -1,69 +1,155 @@
-// ConfigMatrix-Sync - Production HTTP Server
+// ConfigMatrix-Sync v2.0.0 - Production HTTP Server & Dynamic Configuration Control Plane
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const url = require('url');
-const CoreEngine = require('./engine');
+const { ConfigMatrixEngine } = require('./engine');
 
-const engine = new CoreEngine();
-const PORT = parseInt(process.env.PORT, 10) || 6025;
+const engine = new ConfigMatrixEngine();
+const PORT = parseInt(process.env.PORT, 10) || 6028;
 const publicDir = path.join(__dirname, '..', 'public');
 const startTime = Date.now();
 
-function requestHandler(req, res) {
-  const reqUrl = new URL(req.url, 'http://' + (req.headers.host || 'localhost'));
-  const pathname = reqUrl.pathname;
+// Pre-seed sample enterprise feature flags
+engine.registerFlag('beta_dark_mode_ui', {
+  description: 'Next-generation high-contrast dark UI palette',
+  enabled: true,
+  rolloutPercentage: 50,
+  rules: [
+    {
+      ruleId: 'internal-employees',
+      conditions: [{ attribute: 'email', operator: 'CONTAINS', value: '@company.internal' }],
+      value: true
+    }
+  ]
+});
 
-  // CORS Headers
+engine.registerFlag('ai_code_completion_v2', {
+  description: 'Real-time multi-token speculative decoding assistant',
+  enabled: true,
+  rolloutPercentage: 25,
+  rules: [
+    {
+      ruleId: 'tier-pro-users',
+      conditions: [{ attribute: 'role', operator: 'EQUALS', value: 'admin' }],
+      value: true
+    }
+  ]
+});
+
+engine.registerFlag('payment_checkout_v3', {
+  description: 'Stripe Elements 1-click checkout flow',
+  enabled: false,
+  rolloutPercentage: 0,
+  defaultValue: false
+});
+
+function requestHandler(req, res) {
+  const parsed = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const pathname = parsed.pathname;
+
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type'
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     });
     return res.end();
+  }
+
+  // 1. SSE Real-Time Stream API
+  if (pathname === '/api/events/stream') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.write(`data: ${JSON.stringify({ event: 'CONNECTED', timestamp: Date.now() })}\n\n`);
+    engine.subscribe(res);
+    return;
   }
 
   let body = '';
   req.on('data', chunk => body += chunk);
   req.on('end', () => {
-    // 1. Health API
+    // 2. Health API
     if (pathname === '/api/health') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
       return res.end(JSON.stringify({
         status: 'UP',
-        service: "ConfigMatrix-Sync",
+        service: 'ConfigMatrix-Sync',
         uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
         timestamp: new Date().toISOString()
       }));
     }
 
-    // 2. Stats & Telemetry API
+    // 3. Stats API
     if (pathname === '/api/stats') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
       return res.end(JSON.stringify({
         success: true,
-        service: "ConfigMatrix-Sync",
-        description: "Zero-downtime configuration distribution broker supporting canary rollout percentages, user cohort targeting, and instant SSE updates.",
-        status: 'OPTIMAL',
-        metrics: engine.metrics()
+        service: 'ConfigMatrix-Sync',
+        metrics: engine.getMetrics()
       }));
     }
 
-    // 3. Computational Process API
-    if (req.method === 'POST' && pathname === '/api/process') {
+    // 4. List Flags API
+    if (req.method === 'GET' && pathname === '/api/flags') {
+      const flags = Array.from(engine.flags.values());
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ success: true, count: flags.length, flags }));
+    }
+
+    // 5. Create Flag API
+    if (req.method === 'POST' && pathname === '/api/flags') {
       try {
-        const data = JSON.parse(body || '{}');
-        const resObj = engine.process(data);
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-        return res.end(JSON.stringify({ success: true, result: resObj }));
-      } catch (e) {
+        const payload = JSON.parse(body || '{}');
+        if (!payload.key) throw new Error('"key" is required');
+        const flag = engine.registerFlag(payload.key, payload);
+        res.writeHead(201, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        return res.end(JSON.stringify({ success: true, flag }));
+      } catch (err) {
         res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-        return res.end(JSON.stringify({ error: e.message }));
+        return res.end(JSON.stringify({ success: false, error: err.message }));
       }
     }
 
-    // 4. Static Web UI Files
+    // 6. Update Flag API (POST /api/flags/update or PUT /api/flags/:key)
+    if (req.method === 'POST' && pathname === '/api/flags/update') {
+      try {
+        const payload = JSON.parse(body || '{}');
+        if (!payload.key) throw new Error('"key" is required');
+        const flag = engine.updateFlag(payload.key, payload);
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        return res.end(JSON.stringify({ success: true, flag }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        return res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    }
+
+    // 7. Evaluate Flags against User Context
+    if (req.method === 'POST' && pathname === '/api/evaluate') {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const context = payload.context || payload;
+        const evaluated = engine.evaluateAll(context);
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        return res.end(JSON.stringify({ success: true, context, flags: evaluated }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        return res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    }
+
+    // 8. Reset API
+    if (req.method === 'POST' && pathname === '/api/reset') {
+      engine.reset();
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ success: true, message: 'ConfigMatrix reset' }));
+    }
+
+    // 9. Static Web UI Files
     let filePath = path.join(publicDir, pathname === '/' ? 'index.html' : pathname);
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
       const ext = path.extname(filePath).toLowerCase();
@@ -77,7 +163,7 @@ function requestHandler(req, res) {
       return res.end(fs.readFileSync(filePath));
     }
 
-    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify({ error: 'Endpoint not found' }));
   });
 }

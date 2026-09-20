@@ -1,9 +1,9 @@
 # ⚡ ConfigMatrix-Sync
-> **Distributed Feature Flag & Dynamic Configuration Matrix**  
+> **Distributed Feature Flag & Dynamic Configuration Matrix with Deterministic Canary Rollouts**  
 > *Developed autonomously by the 7-Agent SDLC Software Factory for [Ali Nurettin Demir](https://github.com/alinurettin)*
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/tests-100%25_passed-success.svg)]()
+[![Tests](https://img.shields.io/badge/tests-28%2F28%20passing%20(100%25)-success.svg)]()
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-blue.svg)]()
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -11,9 +11,9 @@
 ---
 
 ## 🌟 Executive Summary & Value Proposition
-Zero-downtime configuration distribution broker supporting canary rollout percentages, user cohort targeting, and instant SSE updates.
+In modern distributed microservice architectures, changing application behavior or launching feature experiments should not require a code commit, a continuous integration pipeline run, or a service restart.
 
-In modern software architectures, organizations struggle with bloated cloud dependencies, expensive managed services, and vendor lock-in. **ConfigMatrix-Sync** provides a self-hosted, lightweight, sub-millisecond solution crafted from first principles with zero external runtime dependencies.
+**ConfigMatrix-Sync** is a high-speed, zero-dependency distributed feature flag and dynamic configuration control plane. Engineered from first principles using pure Node.js standard libraries, it delivers deterministic canary user bucketing via SHA-256 32-bit truncation hashing, complex multi-attribute targeting rules, and sub-10ms real-time event distribution over Server-Sent Events (SSE).
 
 ---
 
@@ -21,106 +21,139 @@ In modern software architectures, organizations struggle with bloated cloud depe
 
 ```mermaid
 flowchart TD
-    Client["🌐 Client Applications / Microservices"] -->|HTTP REST / JSON| Gateway["⚡ ConfigMatrix-Sync Entrypoint (Port 6025)"]
-    Gateway --> Router["🔀 Route Dispatcher & Middleware"]
-    Router --> Engine["🧠 Core Algorithmic Engine"]
-    Engine --> Storage["💾 In-Memory High-Speed State Store"]
-    Router --> Static["📦 Embedded Operational Dashboard (Web UI)"]
-    Engine --> Metrics["📊 OpenTelemetry & Health Telemetry Exporter"]
+    subgraph ControlPlane [Control Plane & Studio]
+        UI["🖥️ Dark-Mode Dashboard (Port 6025)"]
+        AdminCLI["⚙️ Admin REST API & CI/CD"]
+    end
+
+    subgraph CoreEngine [ConfigMatrix-Sync Engine]
+        Dispatcher["⚡ HTTP Route Dispatcher"]
+        Registry["💾 Concurrent In-Memory Flag Registry"]
+        Murmur["🔢 MurmurRollout (SHA-256 Truncation)"]
+        RuleAST["📋 RuleEvaluator (Targeting Operators)"]
+        SSEHub["📡 SSE Event Broadcaster"]
+    end
+
+    subgraph EdgeServices [Distributed Microservices]
+        Svc1["🚀 Payment Gateway"]
+        Svc2["📦 Checkout Service"]
+        Svc3["🔍 Search Recommendation Engine"]
+    end
+
+    UI -->|REST /api/flags| Dispatcher
+    AdminCLI -->|REST /api/flags| Dispatcher
+    Dispatcher --> Registry
+    Registry --> Murmur
+    Registry --> RuleAST
+    Registry -->|State Delta| SSEHub
+    SSEHub -->|text/event-stream| UI
+    SSEHub -->|text/event-stream| Svc1
+    SSEHub -->|text/event-stream| Svc2
+    SSEHub -->|text/event-stream| Svc3
 ```
 
 ---
 
-## 🎯 Key Architectural Features
-- **Zero External Dependencies:** Built with pure Node.js standard libraries for instantaneous boot times (< 50ms) and minimal container footprints.
-- **High-Throughput Algorithmic Processing:** Employs optimized memory structures and sub-millisecond execution pathways.
-- **Built-in Live Web Dashboard:** Embedded responsive dark-mode operational UI for telemetry monitoring, status tracking, and ad-hoc query evaluation.
-- **Containerized & Cloud-Native:** Ships with production-ready multi-stage `Dockerfile` and `docker-compose.yml` configurations.
-- **Continuous Integration (CI/CD):** Integrated automated GitHub Actions workflow verifying code integrity, test suites, and Docker builds on every push.
+## 🔬 Mathematical & Algorithmic Foundation
+
+### 1. Deterministic Canary Rollout Hashing
+To ensure that user $u$ receives the exact same evaluation outcome for flag $k$ across all distributed cluster nodes without maintaining state or distributed locks:
+
+$$\text{digest} = \text{SHA-256}(u \mathbin{\Vert} \text{":\!"} \mathbin{\Vert} k)$$
+$$\text{val}_{32} = \text{to\_uint32}(\text{digest}[0..3])$$
+$$\text{bucket}(u, k) = \left\lfloor \frac{\text{val}_{32}}{2^{32} - 1} \times 100 \right\rfloor$$
+
+A user is assigned to the canary cohort if $\text{bucket}(u, k) < P_{\text{rollout}}$.
+
+### 2. Multi-Attribute Targeting Rule Evaluator
+Each flag supports targeting rules evaluated in sequential order:
+- **`equals` / `not_equals`**: Exact value equivalence.
+- **`in` / `not_in`**: Set membership check.
+- **`contains`**: Substring matching (e.g., `@company.internal`).
+- **`greater_than` / `less_than`**: Numeric threshold comparison.
+- **`regex`**: Regular expression validation.
+
+If any rule matches, its `serve` value is immediately returned. If no rules match, evaluation falls back to the deterministic canary rollout percentage.
 
 ---
 
-## 🔌 API Specification & REST Endpoints
-All API endpoints accept and return JSON with standard CORS headers enabled.
+## 🔌 API Specification & Endpoints
 
-### Endpoints
-- **`GET /api/health`**: Health status and uptime
-  ```bash
-  curl -X GET http://localhost:6025/api/health
-  ```
-- **`GET /api/stats`**: Operational metrics and engine telemetry
-  ```bash
-  curl -X GET http://localhost:6025/api/stats
-  ```
-- **`POST /api/process`**: Execute computational logic against engine
-  ```bash
-  curl -X POST http://localhost:6025/api/process \
-    -H "Content-Type: application/json" \
-    -d '{"id": "task-1", "payload": "sample data"}'
-  ```
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/health` | Service health status and uptime |
+| `GET` | `/api/stats` | Registry metrics and active subscriber counts |
+| `GET` | `/api/flags` | Retrieve all registered feature flags |
+| `POST` | `/api/flags` | Register a new feature flag |
+| `PUT` | `/api/flags/:key` | Update flag status, rollout, or description |
+| `POST` | `/api/flags/:key/rollout` | Update canary rollout percentage ($0\text{--}100\%$) |
+| `DELETE` | `/api/flags/:key` | Delete a flag from the matrix |
+| `POST` | `/api/flags/evaluate` | Batch evaluate a user context against all flags |
+| `POST` | `/api/flags/reset` | Reset matrix to baseline configuration |
+| `GET` | `/api/events/stream` | Server-Sent Events (SSE) live delta stream |
+
+### Context Evaluation Example
+```bash
+curl -X POST http://localhost:6025/api/flags/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "context": {
+      "userId": "usr_alice_8492",
+      "role": "admin",
+      "email": "alice@company.internal",
+      "country": "US"
+    }
+  }'
+```
 
 ---
 
 ## 🧪 Comprehensive Automated Testing & Verification
-This project includes an exhaustive, non-mocked automated test suite that validates:
-1. **Algorithmic Correctness:** Verifies core mathematical functions and operational logic.
-2. **Boundary & Edge Cases:** Evaluates empty payloads, zero inputs, and exception handling.
-3. **HTTP Integration:** Boots an ephemeral HTTP server, fires live requests, and asserts HTTP status codes (`200 OK`, `400 Bad Request`, `404 Not Found`).
+The test suite in `tests/run_tests.js` runs without external mocking libraries:
 
-### Running Tests
 ```bash
-npm test
-# or directly with Node:
 node tests/run_tests.js
 ```
 
-All tests run in isolation and guarantee 100% assertions pass prior to release.
+### Verified Test Categories:
+- **Deterministic Canary Bucketing (8 assertions):** Verifies mathematical bounds ($[0, 99]$), deterministic repeatability, monotonic inclusion, and key independence.
+- **Multi-Attribute Rule Evaluator (6 assertions):** Verifies `equals`, `contains`, `in`, `regex`, and fallback mechanics.
+- **ConfigMatrixEngine Core (6 assertions):** Validates CRUD operations, duplicate key rejections, and state snapshots.
+- **Live HTTP REST & SSE Integration (8 assertions):** Boots an ephemeral server on port 0, verifies status codes, JSON serialization, and error handling.
 
 ---
 
-## 🚀 Getting Started & Quick Start
+## 🚀 Getting Started
 
 ### Local Node.js Execution
 ```bash
-# 1. Clone the repository
+# 1. Clone repository
 git clone https://github.com/alinurettin/ConfigMatrix-Sync.git
 cd ConfigMatrix-Sync
 
-# 2. Run the automated test suite
+# 2. Run automated test suite
 npm test
 
-# 3. Start the engine
+# 3. Start engine
 npm start
 ```
-Access the live operational dashboard in your browser at:  
-👉 **`http://localhost:6025`**
+Open **`http://localhost:6025`** in your browser to access the live dashboard.
 
-### Running with Docker & Docker Compose
+### Docker & Docker Compose
 ```bash
 docker-compose up -d --build
 ```
 
 ---
 
-## ⚙️ Configuration & Environment Variables
-
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `PORT` | `6025` | HTTP listening port for REST API and Web Dashboard |
-| `NODE_ENV` | `production` | Execution environment mode (`development`, `production`) |
-
----
-
-## 📋 7-Agent Autonomous SDLC Engineering Artifacts
-This software system was designed, documented, implemented, and verified autonomously by the 7-Agent SDLC Team:
-- 🔍 [Technical & Market Research Report](file:///C:/Users/alinurettin/.gemini/antigravity/scratch/projects/ConfigMatrix-Sync/artifacts/RESEARCH_REPORT.md)
-- 📊 [Product Requirements Document (PRD)](file:///C:/Users/alinurettin/.gemini/antigravity/scratch/projects/ConfigMatrix-Sync/artifacts/PRD.md)
-- 📐 [System Architecture Specification](file:///C:/Users/alinurettin/.gemini/antigravity/scratch/projects/ConfigMatrix-Sync/artifacts/ARCHITECTURE.md)
-- 🧪 [QA & Automated Test Verification Report](file:///C:/Users/alinurettin/.gemini/antigravity/scratch/projects/ConfigMatrix-Sync/artifacts/QA_REPORT.md)
-- 🚀 [Formal Release Notes v1.0.0](file:///C:/Users/alinurettin/.gemini/antigravity/scratch/projects/ConfigMatrix-Sync/artifacts/RELEASE_NOTES.md)
+## 📄 Artifacts & Documentation
+- [Research Report](file:///C:/Users/alinurettin/.gemini/antigravity/scratch/projects/ConfigMatrix-Sync/artifacts/RESEARCH_REPORT.md)
+- [Product Requirements Document (PRD)](file:///C:/Users/alinurettin/.gemini/antigravity/scratch/projects/ConfigMatrix-Sync/artifacts/PRD.md)
+- [Architecture Blueprint](file:///C:/Users/alinurettin/.gemini/antigravity/scratch/projects/ConfigMatrix-Sync/artifacts/ARCHITECTURE.md)
+- [QA & Verification Report](file:///C:/Users/alinurettin/.gemini/antigravity/scratch/projects/ConfigMatrix-Sync/artifacts/QA_REPORT.md)
+- [Release Notes](file:///C:/Users/alinurettin/.gemini/antigravity/scratch/projects/ConfigMatrix-Sync/artifacts/RELEASE_NOTES.md)
 
 ---
 
-## 👤 Author & Open-Source License
-- **Author & Maintainer:** Ali Nurettin Demir ([@alinurettin](https://github.com/alinurettin))
-- **License:** [MIT License](LICENSE) &copy; 2026 Ali Nurettin Demir
+## 📜 License
+MIT License. Engineered autonomously by the 7-Agent SDLC Software Factory for Ali Nurettin Demir.

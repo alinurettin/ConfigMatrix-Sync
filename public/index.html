@@ -3,42 +3,150 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ConfigMatrix-Sync | Operational Studio</title>
+  <title>ConfigMatrix-Sync | Dynamic Feature Flag & Rollout Matrix Studio</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="header">
-    <div class="brand">
-      <span class="logo">⚡</span>
-      <div>
-        <h1>ConfigMatrix-Sync</h1>
-        <span class="sub">Distributed Feature Flag & Dynamic Configuration Matrix</span>
+  <div class="layout">
+    <header class="header">
+      <div class="brand">
+        <span class="logo">🎛️</span>
+        <div>
+          <h1>ConfigMatrix-Sync <span class="version-tag">v2.0.0</span></h1>
+          <span class="sub">Distributed Feature Flag & Dynamic Configuration Matrix with Deterministic Canary Rollouts</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div id="sseBadge" class="badge badge-active">SSE: CONNECTED</div>
+        <button id="btnResetAll" class="btn btn-secondary">Reset Matrix</button>
+      </div>
+    </header>
+
+    <!-- METRICS RIBBON -->
+    <section class="grid-metrics">
+      <div class="metric-card">
+        <span class="m-label">TOTAL FLAGS</span>
+        <span class="m-val" id="valTotalFlags">0</span>
+        <span class="m-sub">Registered feature toggles</span>
+      </div>
+      <div class="metric-card">
+        <span class="m-label">ACTIVE FLAGS</span>
+        <span class="m-val success" id="valActiveFlags">0</span>
+        <span class="m-sub">Live in production</span>
+      </div>
+      <div class="metric-card">
+        <span class="m-label">DISABLED FLAGS</span>
+        <span class="m-val danger" id="valDisabledFlags">0</span>
+        <span class="m-sub">Killed / dark features</span>
+      </div>
+      <div class="metric-card">
+        <span class="m-label">SSE SUBSCRIBERS</span>
+        <span class="m-val highlight" id="valSubscribers">0</span>
+        <span class="m-sub">Live streaming clients</span>
+      </div>
+    </section>
+
+    <!-- TWO COLUMN CONTROL GRID -->
+    <div class="grid-two">
+      <!-- USER EVALUATION SANDBOX -->
+      <div class="card">
+        <div class="card-header">
+          <h2>🔍 User Context Evaluation Sandbox</h2>
+          <span class="card-sub">Simulate multi-dimensional context matching and deterministic canary rollouts</span>
+        </div>
+        <form id="sandboxForm" class="form-vertical">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="inputUserId">User ID:</label>
+              <input type="text" id="inputUserId" value="usr_alice_8492" required>
+            </div>
+            <div class="form-group">
+              <label for="inputRole">Role:</label>
+              <select id="inputRole">
+                <option value="user">Standard User</option>
+                <option value="admin">Administrator</option>
+                <option value="beta-tester">Beta Tester</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="inputEmail">Email Address:</label>
+              <input type="text" id="inputEmail" value="alice@company.internal">
+            </div>
+            <div class="form-group">
+              <label for="inputCountry">Country:</label>
+              <input type="text" id="inputCountry" value="US">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Evaluate Context</button>
+            <button type="button" id="btnRandomUser" class="btn btn-action">🎲 Random User</button>
+          </div>
+        </form>
+
+        <div id="evalResultsContainer" class="eval-results-box">
+          <span class="text-muted">Awaiting evaluation...</span>
+        </div>
+      </div>
+
+      <!-- CREATE NEW FLAG -->
+      <div class="card">
+        <div class="card-header">
+          <h2>➕ Register New Feature Flag</h2>
+          <span class="card-sub">Deploy new feature gatekeeper to cluster</span>
+        </div>
+        <form id="createFlagForm" class="form-vertical">
+          <div class="form-group">
+            <label for="inputNewKey">Flag Key (snake_case):</label>
+            <input type="text" id="inputNewKey" placeholder="e.g. dynamic_checkout_flow" required>
+          </div>
+          <div class="form-group">
+            <label for="inputNewDesc">Description:</label>
+            <input type="text" id="inputNewDesc" placeholder="e.g. Next-gen checkout pipeline with Apple Pay">
+          </div>
+          <div class="form-group">
+            <label for="inputNewRollout">Canary Rollout Percentage (0 - 100%):</label>
+            <input type="number" id="inputNewRollout" min="0" max="100" value="50">
+          </div>
+          <button type="submit" class="btn btn-action">Register Feature Flag</button>
+        </form>
       </div>
     </div>
-    <div class="status-badge">🟢 Operational Active</div>
-  </header>
-  <main class="main">
+
+    <!-- FEATURE FLAGS MATRIX TABLE -->
     <div class="card">
-      <h2>Engine Overview</h2>
-      <p>Zero-downtime configuration distribution broker supporting canary rollout percentages, user cohort targeting, and instant SSE updates.</p>
-      <div class="metrics-row" id="metricsRow">
-        <div class="metric"><span class="lbl">STATUS</span><span class="val">HEALTHY</span></div>
-        <div class="metric"><span class="lbl">LATENCY</span><span class="val">&lt; 1 ms</span></div>
-        <div class="metric"><span class="lbl">THROUGHPUT</span><span class="val">2,400 req/s</span></div>
+      <div class="card-header flex-between">
+        <div>
+          <h2>🎛️ Live Feature Flag Matrix &amp; Canary Knobs</h2>
+          <span class="card-sub">Instant zero-downtime updates distributed via SSE to all microservices</span>
+        </div>
+        <button id="btnRefreshFlags" class="btn btn-sm">Refresh Matrix</button>
+      </div>
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Flag Key</th>
+              <th>Status</th>
+              <th>Rollout Percentage</th>
+              <th>Description</th>
+              <th>Targeting Rules</th>
+              <th>Quick Actions</th>
+            </tr>
+          </thead>
+          <tbody id="flagsTableBody">
+            <tr><td colspan="6" class="text-center text-muted">Loading flags...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
-    <div class="card">
-      <h2>Interactive Engine Execution</h2>
-      <form id="execForm">
-        <input type="text" id="payloadInput" placeholder='{"id":"test-1", "action":"evaluate"}' required>
-        <button type="submit">Execute Logic</button>
-      </form>
-      <pre id="outputConsole">Awaiting request...</pre>
-    </div>
-  </main>
-  <footer class="footer">
-    <p>ConfigMatrix-Sync &bull; Autonomously engineered by 7-Agent SDLC Factory for <a href="https://github.com/alinurettin/ConfigMatrix-Sync" target="_blank">Ali Nurettin Demir</a></p>
-  </footer>
+
+    <footer class="footer">
+      <p>ConfigMatrix-Sync v2.0.0 &bull; Dynamic Feature Flag Matrix &bull; Autonomously engineered by 7-Agent SDLC Factory for <a href="https://github.com/alinurettin/ConfigMatrix-Sync" target="_blank">Ali Nurettin Demir</a></p>
+    </footer>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
