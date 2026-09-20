@@ -1,0 +1,12 @@
+{
+  "name": "configmatrix-sync",
+  "version": "1.0.0",
+  "description": "Zero-downtime configuration distribution broker supporting canary rollout percentages, user cohort targeting, and instant SSE updates.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node tests/run_tests.js"
+  },
+  "author": "Ali Nurettin Demir (alinurettin)",
+  "license": "MIT"
+}

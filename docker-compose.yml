@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  configmatrix-sync:
+    build: .
+    ports:
+      - "6025:6025"
+    environment:
+      - PORT=6025
+      - NODE_ENV=production
+    restart: unless-stopped

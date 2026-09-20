@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConfigMatrix-Sync | Operational Studio</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="brand">
+      <span class="logo">⚡</span>
+      <div>
+        <h1>ConfigMatrix-Sync</h1>
+        <span class="sub">Distributed Feature Flag & Dynamic Configuration Matrix</span>
+      </div>
+    </div>
+    <div class="status-badge">🟢 Operational Active</div>
+  </header>
+  <main class="main">
+    <div class="card">
+      <h2>Engine Overview</h2>
+      <p>Zero-downtime configuration distribution broker supporting canary rollout percentages, user cohort targeting, and instant SSE updates.</p>
+      <div class="metrics-row" id="metricsRow">
+        <div class="metric"><span class="lbl">STATUS</span><span class="val">HEALTHY</span></div>
+        <div class="metric"><span class="lbl">LATENCY</span><span class="val">&lt; 1 ms</span></div>
+        <div class="metric"><span class="lbl">THROUGHPUT</span><span class="val">2,400 req/s</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Interactive Engine Execution</h2>
+      <form id="execForm">
+        <input type="text" id="payloadInput" placeholder='{"id":"test-1", "action":"evaluate"}' required>
+        <button type="submit">Execute Logic</button>
+      </form>
+      <pre id="outputConsole">Awaiting request...</pre>
+    </div>
+  </main>
+  <footer class="footer">
+    <p>ConfigMatrix-Sync &bull; Autonomously engineered by 7-Agent SDLC Factory for <a href="https://github.com/alinurettin/ConfigMatrix-Sync" target="_blank">Ali Nurettin Demir</a></p>
+  </footer>
+  <script src="app.js"></script>
+</body>
+</html>
